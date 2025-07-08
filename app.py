@@ -24,8 +24,13 @@ start = end - dt.timedelta(days=7)
 ticker = "EURUSD=X"  # Ticker Yahoo Finance pour EUR/USD
 data = yf.download(ticker, start=start, end=end, interval=tf_map[timeframe])
 
-# 🛠️ Forcer la normalisation des colonnes
-data.columns = [col.capitalize() for col in data.columns]
+# Aplatir les colonnes s'il y a un MultiIndex
+if isinstance(data.columns, pd.MultiIndex):
+    data.columns = [col[0] for col in data.columns]
+
+# Ensuite, forcer la capitalisation (proprement)
+data.columns = [str(col).capitalize() for col in data.columns]
+
 
 # 🔍 Vérification
 if data.empty or 'Close' not in data.columns:
