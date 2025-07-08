@@ -17,31 +17,37 @@ tf_map = {
 }
 timeframe = st.selectbox("Choisir le timeframe :", list(tf_map.keys()))
 
-# Récupérer les données
+# Télécharger les données
 end = dt.datetime.now()
-start = end - dt.timedelta(days=7)  # max pour l'intraday
+start = end - dt.timedelta(days=7)  # yfinance accepte jusqu'à 7 jours pour l'intraday
 
-# Ticker pour EUR/USD sur Yahoo Finance
-ticker = "EURUSD=X"
-
+ticker = "EURUSD=X"  # Ticker Yahoo Finance pour EUR/USD
 data = yf.download(ticker, start=start, end=end, interval=tf_map[timeframe])
 
 if data.empty:
     st.warning("❌ Aucune donnée récupérée. Vérifie le ticker ou l'intervalle.")
     st.stop()
 
-# Calcul des indicateurs
+# Indicateurs techniques
 data['EMA20'] = data['Close'].ewm(span=20).mean()
 data['EMA50'] = data['Close'].ewm(span=50).mean()
 
+# RSI
 delta = data['Close'].diff()
-gain = np.where(delta > 0, delta, 0)
-loss = np.where(delta < 0, -delta, 0)
-avg_gain = pd.Series(gain).rolling(window=14).mean()
-avg_loss = pd.Series(loss).rolling(window=14).mean()
+
+gain = delta.copy()
+gain[gain < 0] = 0
+
+loss = delta.copy()
+loss[loss > 0] = 0
+loss = -loss  # rendre les pertes positives
+
+avg_gain = gain.rolling(window=14).mean()
+avg_loss = loss.rolling(window=14).mean()
 rs = avg_gain / avg_loss
 data['RSI'] = 100 - (100 / (1 + rs))
 
+# MACD
 ema12 = data['Close'].ewm(span=12).mean()
 ema26 = data['Close'].ewm(span=26).mean()
 data['MACD'] = ema12 - ema26
@@ -71,7 +77,7 @@ def generate_signals(df):
 
 data = generate_signals(data)
 
-# Affichage graphique
+# Affichage du graphique
 fig = go.Figure()
 fig.add_trace(go.Candlestick(
     x=data.index,
@@ -84,7 +90,7 @@ fig.add_trace(go.Candlestick(
 fig.add_trace(go.Scatter(x=data.index, y=data['EMA20'], line=dict(color='orange'), name='EMA20'))
 fig.add_trace(go.Scatter(x=data.index, y=data['EMA50'], line=dict(color='blue'), name='EMA50'))
 
-# Affichage des signaux
+# Signaux LONG/SHORT
 long_signals = data[data['TradeSignal'] == "LONG"]
 short_signals = data[data['TradeSignal'] == "SHORT"]
 
@@ -105,7 +111,7 @@ fig.add_trace(go.Scatter(
 
 st.plotly_chart(fig, use_container_width=True)
 
-# Signal actuel
+# Affichage du dernier signal
 latest_signal = data['TradeSignal'].iloc[-1]
 if latest_signal == "LONG":
     st.success("📈 Signal actuel : LONG")
