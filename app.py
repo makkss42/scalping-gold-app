@@ -19,13 +19,17 @@ timeframe = st.selectbox("Choisir le timeframe :", list(tf_map.keys()))
 
 # Télécharger les données
 end = dt.datetime.now()
-start = end - dt.timedelta(days=7)  # yfinance accepte jusqu'à 7 jours pour l'intraday
+start = end - dt.timedelta(days=7)
 
 ticker = "EURUSD=X"  # Ticker Yahoo Finance pour EUR/USD
 data = yf.download(ticker, start=start, end=end, interval=tf_map[timeframe])
 
-if data.empty:
-    st.warning("❌ Aucune donnée récupérée. Vérifie le ticker ou l'intervalle.")
+# 🛠️ Forcer la normalisation des colonnes
+data.columns = [col.capitalize() for col in data.columns]
+
+# 🔍 Vérification
+if data.empty or 'Close' not in data.columns:
+    st.warning("❌ Aucune donnée récupérée ou colonne 'Close' manquante.")
     st.stop()
 
 # Indicateurs techniques
@@ -34,7 +38,6 @@ data['EMA50'] = data['Close'].ewm(span=50).mean()
 
 # RSI
 delta = data['Close'].diff()
-
 gain = delta.copy()
 gain[gain < 0] = 0
 
@@ -53,20 +56,20 @@ ema26 = data['Close'].ewm(span=26).mean()
 data['MACD'] = ema12 - ema26
 data['Signal'] = data['MACD'].ewm(span=9).mean()
 
-# Génération de signaux
+# Signaux scalping
 def generate_signals(df):
     signals = []
     for i in range(1, len(df)):
         if (
-            df['Close'][i] > df['EMA50'][i]
-            and df['RSI'][i] > 50
-            and df['MACD'][i] > df['Signal'][i]
+            df['Close'].iloc[i] > df['EMA50'].iloc[i]
+            and df['RSI'].iloc[i] > 50
+            and df['MACD'].iloc[i] > df['Signal'].iloc[i]
         ):
             signals.append("LONG")
         elif (
-            df['Close'][i] < df['EMA50'][i]
-            and df['RSI'][i] < 50
-            and df['MACD'][i] < df['Signal'][i]
+            df['Close'].iloc[i] < df['EMA50'].iloc[i]
+            and df['RSI'].iloc[i] < 50
+            and df['MACD'].iloc[i] < df['Signal'].iloc[i]
         ):
             signals.append("SHORT")
         else:
@@ -77,7 +80,7 @@ def generate_signals(df):
 
 data = generate_signals(data)
 
-# Affichage du graphique
+# Affichage graphique
 fig = go.Figure()
 fig.add_trace(go.Candlestick(
     x=data.index,
@@ -90,7 +93,7 @@ fig.add_trace(go.Candlestick(
 fig.add_trace(go.Scatter(x=data.index, y=data['EMA20'], line=dict(color='orange'), name='EMA20'))
 fig.add_trace(go.Scatter(x=data.index, y=data['EMA50'], line=dict(color='blue'), name='EMA50'))
 
-# Signaux LONG/SHORT
+# Signaux visuels
 long_signals = data[data['TradeSignal'] == "LONG"]
 short_signals = data[data['TradeSignal'] == "SHORT"]
 
@@ -111,7 +114,7 @@ fig.add_trace(go.Scatter(
 
 st.plotly_chart(fig, use_container_width=True)
 
-# Affichage du dernier signal
+# Dernier signal affiché
 latest_signal = data['TradeSignal'].iloc[-1]
 if latest_signal == "LONG":
     st.success("📈 Signal actuel : LONG")
